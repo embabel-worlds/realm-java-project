@@ -17,6 +17,6 @@ description: |
   (`from: project`) and `maven` (`from: project`) producer kinds.
 version: 0.1.0
 maturity: experimental
-realmLabel: JavaProject
+realmLabel: JavaBuild
 author: Embabel
 tags: [java, maven, source, code, project]
