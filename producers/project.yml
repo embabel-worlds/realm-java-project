@@ -1,0 +1,8 @@
+# A project's own source, from the `source` kind's `from: project` emits. Every key is a project
+# key; every row names its file, line, module, project and a link to the line.
+- { name: projectTypes,       kind: source, from: project, emit: types }
+- { name: projectMembers,     kind: source, from: project, emit: members }
+- { name: projectAnnotations, kind: source, from: project, emit: annotations }
+- { name: projectImports,     kind: source, from: project, emit: imports }
+- { name: projectSettings,    kind: source, from: project, emit: configs }
+- { name: projectFiles,       kind: source, from: project, emit: projectFiles }

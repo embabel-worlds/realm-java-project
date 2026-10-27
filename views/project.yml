@@ -1,0 +1,116 @@
+# The answer surface over ANY Java project. Every view takes `project`: a repository URL
+# (`https://github.com/acme/shop@main`; the default branch without `@ref`) or a folder (under the
+# world's data/, or a name in the owner's mounted workspace). The project is read when the view
+# runs; nothing is stored. No view names a framework.
+
+- name: ProjectOverview
+  description: >-
+    What a project is: the commit or folder read, its modules, and how many types, source files,
+    settings and dependencies it has. The first call for any project, and proof the key resolves.
+  params:
+    project: { type: string, description: "Project key: a repository URL, optionally @ref, or a folder." }
+  cypher: |
+    MATCH (p:JavaProject {key: $project})-[:HAS_MODULE]->(m:ProjectModule)
+    WITH p, collect(m.coordinates) AS modules, head(collect(m.project)) AS read
+    OPTIONAL MATCH (p)-[:DECLARES_TYPE]->(t:JavaProjectType)
+    WITH p, modules, read, count(t) AS types
+    OPTIONAL MATCH (p)-[:HAS_SETTING]->(s:ProjectSetting)
+    WITH p, modules, read, types, count(s) AS settings
+    OPTIONAL MATCH (p)-[:DEPENDS_ON]->(d:ProjectDependency) WHERE d.depth > 0
+    RETURN read AS project, modules, size(modules) AS moduleCount, types, settings,
+           count(DISTINCT d.coordinates) AS dependencies
+
+- name: ProjectModules
+  description: >-
+    The modules of the project's Maven build: coordinates, packaging, parent, and the directory
+    each lives in ('' is the root).
+  params:
+    project: { type: string, description: "Project key." }
+  cypher: |
+    MATCH (p:JavaProject {key: $project})-[:HAS_MODULE]->(m:ProjectModule)
+    RETURN m.module AS module, m.coordinates AS coordinates, m.packaging AS packaging,
+           m.parent AS parent, m.name AS name
+    ORDER BY module LIMIT 300
+
+- name: AnnotatedWith
+  description: >-
+    Everything in the project carrying an annotation, by its simple name (`Transactional`,
+    `Deprecated`, `Test`): what it is on, its attributes, and a link to the line.
+  params:
+    project: { type: string, description: "Project key." }
+    annotation: { type: string, description: "The annotation's simple name, e.g. Transactional." }
+  cypher: |
+    MATCH (p:JavaProject {key: $project})-[:HAS_ANNOTATION]->(a:JavaProjectAnnotation {name: $annotation})
+    RETURN a.targetKind AS on, coalesce(a.owner + '#' + a.targetName, a.targetName) AS target,
+           a.attributes AS attributes, a.path AS file, a.line AS line, a.link AS link
+    ORDER BY file, line LIMIT 500
+
+- name: UsesOfPackage
+  description: >-
+    Which files import from a package (prefix match): `javax.`, `org.junit.Assert`, `com.acme.legacy`.
+    The way to find every place a library or an old API is still used.
+  params:
+    project: { type: string, description: "Project key." }
+    prefix: { type: string, description: "Package or class prefix, e.g. javax.persistence" }
+  cypher: |
+    MATCH (p:JavaProject {key: $project})-[:HAS_IMPORT]->(i:JavaProjectImport)
+    WHERE i.name STARTS WITH $prefix
+    RETURN i.name AS imported, i.path AS file, i.line AS line, i.module AS module, i.link AS link
+    ORDER BY imported, file LIMIT 500
+
+- name: SettingsNamed
+  description: >-
+    Where a configuration key (prefix match) is set across the project's .properties and YAML
+    files, with each value, file, document and line.
+  params:
+    project: { type: string, description: "Project key." }
+    prefix: { type: string, description: "Key prefix, e.g. server. or spring.datasource" }
+  cypher: |
+    MATCH (p:JavaProject {key: $project})-[:HAS_SETTING]->(s:ProjectSetting)
+    WHERE s.name STARTS WITH $prefix
+    RETURN s.name AS key, s.value AS value, s.fileName AS file, s.document AS document,
+           s.line AS line, s.path AS path, s.link AS link
+    ORDER BY key, path LIMIT 500
+
+- name: WhyIsItHere
+  description: >-
+    Why an artifact (by artifactId, or groupId:artifactId) is in the project's resolved
+    dependency tree: every path from a module down to it, and the version Maven settled on.
+  params:
+    project: { type: string, description: "Project key." }
+    artifact: { type: string, description: "artifactId, or groupId:artifactId." }
+  cypher: |
+    MATCH (p:JavaProject {key: $project})-[:DEPENDS_ON]->(d:ProjectDependency)
+    WHERE d.artifactId = $artifact OR d.groupId + ':' + d.artifactId = $artifact
+    RETURN d.module AS module, d.coordinates AS resolved, d.scope AS scope, d.depth AS depth,
+           d.path AS path
+    ORDER BY depth LIMIT 100
+
+- name: VersionOf
+  description: >-
+    Which version of an artifact the project resolves, which version its BOMs and parents
+    manage, and whether a module declares its own — the three answers that disagree when a
+    version override is pinning something old.
+  params:
+    project: { type: string, description: "Project key." }
+    artifact: { type: string, description: "artifactId, or groupId:artifactId." }
+  cypher: |
+    MATCH (p:JavaProject {key: $project})-[:MANAGES]->(v:ProjectManagedVersion)
+    WHERE v.artifactId = $artifact OR v.groupId + ':' + v.artifactId = $artifact
+    WITH p, collect(DISTINCT v.version) AS managed
+    OPTIONAL MATCH (p)-[:DEPENDS_ON]->(d:ProjectDependency)
+    WHERE d.artifactId = $artifact OR d.groupId + ':' + d.artifactId = $artifact
+    RETURN managed, collect(DISTINCT d.version) AS resolved, collect(DISTINCT d.module) AS inModules
+
+- name: DependencyTree
+  description: >-
+    One module's resolved dependency tree, in Maven's order, with depth and scope. `module` is the
+    module's directory ('' for the root).
+  params:
+    project: { type: string, description: "Project key." }
+    module: { type: string, default: "", description: "Module directory; '' is the root." }
+  cypher: |
+    MATCH (p:JavaProject {key: $project})-[:DEPENDS_ON]->(d:ProjectDependency {module: $module})
+    RETURN d.depth AS depth, d.coordinates AS coordinates, d.scope AS scope, d.optional AS optional,
+           d.parent AS via
+    LIMIT 2000

@@ -1,0 +1,229 @@
+# A JAVA PROJECT, read where it lives. Pin it by its key and traverse; nothing is stored.
+#
+#   MATCH (p:JavaProject {key: $project})-[:DECLARES_TYPE]->(t:JavaProjectType)     its types
+#   (p)-[:DECLARES_MEMBER]->(m:JavaProjectMember)       fields, constructors, methods
+#   (p)-[:HAS_ANNOTATION]->(a:JavaProjectAnnotation)    every annotation written, with its attributes
+#   (p)-[:HAS_IMPORT]->(i:JavaProjectImport)            every import
+#   (p)-[:HAS_SETTING]->(s:ProjectSetting)              every key in its .properties / YAML files
+#   (p)-[:HAS_FILE]->(f:ProjectFile)                    every file (build output skipped)
+#   (p)-[:HAS_MODULE]->(mod:ProjectModule)              every module of its Maven build
+#   (p)-[:DEPENDS_ON]->(d:ProjectDependency)            the dependency tree Maven resolves, per module
+#   (p)-[:DECLARES_DEPENDENCY]->(d:ProjectDeclaredDependency)  what each POM declares
+#   (p)-[:MANAGES]->(v:ProjectManagedVersion)           the versions its BOMs and parents pin
+#
+# A project key is a repository (`https://github.com/acme/shop@v2`, the default branch without
+# `@ref`) or a folder (under the world's data/, or in the owner's mounted workspace). Rows carry
+# `project` — the folder as given, or `host/repo@commit` — so every answer says which commit it is
+# about, and `link`, the line on GitHub or GitLab. Names are binary class names (`pkg.Outer$Inner`)
+# resolved as the file resolves them; `qualifiedName` is null where an on-demand import could
+# supply a name and the source alone cannot say which.
+
+- name: JavaProjectType
+  parents: [CodeType]
+  visibility: internal
+  userAnchor: false
+  description: "A type a Java project declares in its own source: class, interface, enum, record or annotation. `extends`/`implements` and `annotations` are resolved names. Reach it from (:JavaProject {key})-[:DECLARES_TYPE]->."
+  virtualJoins:
+    - { anchorLabel: JavaProject, relationship: DECLARES_TYPE, keyField: key, recordKeyField: anchorKey, producer: projectTypes,
+        description: "(:JavaProject {key:$project})-[:DECLARES_TYPE]->(t:JavaProjectType)" }
+  properties:
+    id: { identity: true, description: "`<project>!<binary name>`." }
+    name: "Binary name, `pkg.Outer$Inner`."
+    simpleName: "The name without package or enclosing type."
+    packageName: "Dotted package name."
+    kind: "class, interface, enum, record or annotation."
+    extends: { cardinality: LIST, description: "Supertype, resolved (a class has at most one)." }
+    implements: { cardinality: LIST, description: "Interfaces it implements, resolved." }
+    annotations: { cardinality: LIST, description: "Annotations on the type, resolved names." }
+    modifiers: { cardinality: LIST, description: "public, abstract, final, …" }
+    isTopLevel: { type: boolean, description: "Declared at the top of its file rather than nested." }
+    path: "Source file, relative to the project."
+    module: "Maven module directory holding it; '' for the root."
+    line: { type: int, description: "Line it is declared on." }
+    lastLine: { type: int, description: "Its last line." }
+    link: "The line on the repository's host, when it has one."
+    project: "The project as read: the folder, or host/repo@commit."
+
+- name: JavaProjectMember
+  visibility: internal
+  userAnchor: false
+  description: "A field, constructor or method a Java project declares. A field's `type`, a method's `returnType` and `parameterTypes` are resolved names; `annotations` too. Reach it from (:JavaProject {key})-[:DECLARES_MEMBER]->; its type is the JavaProjectType whose `name` is its `owner`."
+  virtualJoins:
+    - { anchorLabel: JavaProject, relationship: DECLARES_MEMBER, keyField: key, recordKeyField: anchorKey, producer: projectMembers,
+        description: "(:JavaProject {key:$project})-[:DECLARES_MEMBER]->(m:JavaProjectMember)" }
+  properties:
+    id: { identity: true, description: "`<project>!<owner>#<name>(<parameter types>)`." }
+    owner: "Binary name of the declaring type."
+    name: "Member name."
+    kind: "field, constructor or method."
+    type: "A field's declared type, resolved."
+    returnType: "A method's return type, resolved."
+    parameters: { cardinality: LIST, description: "`<type> <name>` for each parameter." }
+    parameterTypes: { cardinality: LIST, description: "Each parameter's type, resolved." }
+    annotations: { cardinality: LIST, description: "Annotations on the member, resolved." }
+    modifiers: { cardinality: LIST, description: "public, private, static, final, …" }
+    path: "Source file."
+    module: "Maven module directory."
+    line: { type: int, description: "Line it is declared on." }
+    link: "The line on the repository's host."
+
+- name: JavaProjectAnnotation
+  visibility: internal
+  userAnchor: false
+  description: "One annotation written in a Java project, on a type, field, constructor, method or parameter, with its attributes as written. `value` is its single value (or its `value=`); `attributes` lists every `name=value`. Reach it from (:JavaProject {key})-[:HAS_ANNOTATION]->."
+  virtualJoins:
+    - { anchorLabel: JavaProject, relationship: HAS_ANNOTATION, keyField: key, recordKeyField: anchorKey, producer: projectAnnotations,
+        description: "(:JavaProject {key:$project})-[:HAS_ANNOTATION]->(a:JavaProjectAnnotation)" }
+  properties:
+    id: { identity: true, description: "`<project>!<path>:<line>:<column>`." }
+    name: "The annotation's simple name as written, e.g. Profile."
+    qualifiedName: "Resolved name; null when the source cannot say."
+    attributes: { cardinality: LIST, description: "Each attribute as `name=value`; a list's elements comma-joined." }
+    value: "The single value, or the `value=` attribute; lists comma-joined."
+    values: { cardinality: LIST, description: "The same, as a list." }
+    text: "The annotation as written."
+    targetKind: "type, field, constructor, method or parameter."
+    targetId: "Id of the type or member it is on."
+    targetName: "The type's binary name, or the member's or parameter's name."
+    owner: "Binary name of the type a member or parameter belongs to."
+    path: "Source file."
+    module: "Maven module directory."
+    line: { type: int, description: "Line it is written on." }
+    link: "The line on the repository's host."
+
+- name: JavaProjectImport
+  visibility: internal
+  userAnchor: false
+  description: "One import in a Java project's source. Which packages a project's code uses, file by file. Reach it from (:JavaProject {key})-[:HAS_IMPORT]->."
+  virtualJoins:
+    - { anchorLabel: JavaProject, relationship: HAS_IMPORT, keyField: key, recordKeyField: anchorKey, producer: projectImports,
+        description: "(:JavaProject {key:$project})-[:HAS_IMPORT]->(i:JavaProjectImport)" }
+  properties:
+    id: { identity: true, description: "`<project>!<path>:<line>`." }
+    name: "What is imported, e.g. javax.persistence.Entity."
+    packageName: "Its package."
+    isStatic: { type: boolean, description: "A static import." }
+    isWildcard: { type: boolean, description: "An on-demand import (`.*`)." }
+    path: "Source file."
+    module: "Maven module directory."
+    line: { type: int, description: "Line it is on." }
+    link: "The line on the repository's host."
+
+- name: ProjectSetting
+  visibility: internal
+  userAnchor: false
+  description: "One setting in a project's .properties or YAML file: its key flattened to the dotted path a properties file would write (`server.ssl.enabled`, `include[0]`), its value as written, the file, the line, and — for a YAML file of several — which document (from 0). Reach it from (:JavaProject {key})-[:HAS_SETTING]->."
+  virtualJoins:
+    - { anchorLabel: JavaProject, relationship: HAS_SETTING, keyField: key, recordKeyField: anchorKey, producer: projectSettings,
+        description: "(:JavaProject {key:$project})-[:HAS_SETTING]->(s:ProjectSetting)" }
+  properties:
+    id: { identity: true, description: "`<project>!<path>#<document>#<key>`." }
+    name: "The key, flattened."
+    value: "The value as written; null for an empty or non-scalar one."
+    document: { type: int, description: "Which document of a multi-document YAML file, from 0." }
+    fileName: "The file's name, e.g. application-prod.yml."
+    path: "File path."
+    module: "Maven module directory."
+    line: { type: int, description: "Line it is on." }
+    link: "The line on the repository's host."
+
+- name: ProjectFile
+  visibility: internal
+  userAnchor: false
+  description: "A file in a project (build output, .git and the like skipped). Reach it from (:JavaProject {key})-[:HAS_FILE]->."
+  virtualJoins:
+    - { anchorLabel: JavaProject, relationship: HAS_FILE, keyField: key, recordKeyField: anchorKey, producer: projectFiles,
+        description: "(:JavaProject {key:$project})-[:HAS_FILE]->(f:ProjectFile)" }
+  properties:
+    id: { identity: true, description: "`<project>!<path>`." }
+    path: "Path within the project."
+    fileName: "Its name."
+    extension: "Its extension, lower case."
+    module: "Maven module directory."
+    link: "Its page on the repository's host."
+
+- name: ProjectModule
+  visibility: internal
+  userAnchor: false
+  description: "A module of a project's Maven build, as its POM describes it: coordinates, packaging, parent, name, licences. The root is the module whose `module` is ''. Reach it from (:JavaProject {key})-[:HAS_MODULE]->."
+  virtualJoins:
+    - { anchorLabel: JavaProject, relationship: HAS_MODULE, keyField: key, recordKeyField: anchorKey, producer: projectModules,
+        description: "(:JavaProject {key:$project})-[:HAS_MODULE]->(m:ProjectModule)" }
+  properties:
+    coordinates: { identity: true, description: "groupId:artifactId:version." }
+    groupId: "Maven groupId."
+    artifactId: "Maven artifactId."
+    version: "Version."
+    packaging: "jar, pom, war, …"
+    name: "The POM's <name>."
+    parent: "The parent POM's coordinates."
+    module: "Its directory in the project; '' for the root."
+
+- name: ProjectDependency
+  visibility: internal
+  userAnchor: false
+  description: "An artifact in a module's dependency tree as Maven resolves it — versions settled by Maven's rules, BOMs and parents applied — the module itself first at depth 0. `scope` and `optional` as Maven derives them. Reach it from (:JavaProject {key})-[:DEPENDS_ON]->."
+  virtualJoins:
+    - { anchorLabel: JavaProject, relationship: DEPENDS_ON, keyField: key, recordKeyField: anchorKey, producer: projectDependencies,
+        description: "(:JavaProject {key:$project})-[:DEPENDS_ON]->(d:ProjectDependency)" }
+  properties:
+    id: { identity: true, description: "Module and coordinates." }
+    coordinates: "groupId:artifactId:version."
+    groupId: "Maven groupId."
+    artifactId: "Maven artifactId."
+    version: "The version Maven settled on."
+    scope: "compile, runtime, …"
+    optional: { type: boolean, description: "Declared optional." }
+    depth: { type: int, description: "0 for the module, 1 for what it declares, …" }
+    parent: "Coordinates of the artifact that brought it in."
+    path: { cardinality: LIST, description: "Coordinates from the module down to it." }
+    module: "Which module's tree; '' for the root."
+
+- name: ProjectDeclaredDependency
+  visibility: internal
+  userAnchor: false
+  description: "A dependency a module's POM declares, after inheritance and management: the version shown is the one Maven applies, whoever pinned it. Reach it from (:JavaProject {key})-[:DECLARES_DEPENDENCY]->."
+  virtualJoins:
+    - { anchorLabel: JavaProject, relationship: DECLARES_DEPENDENCY, keyField: key, recordKeyField: anchorKey, producer: projectDeclared,
+        description: "(:JavaProject {key:$project})-[:DECLARES_DEPENDENCY]->(d:ProjectDeclaredDependency)" }
+  properties:
+    id: { identity: true, description: "Module and coordinates." }
+    coordinates: "groupId:artifactId:version."
+    groupId: "Maven groupId."
+    artifactId: "Maven artifactId."
+    version: "The version Maven applies."
+    scope: "Declared scope."
+    optional: { type: boolean, description: "Declared optional." }
+    exclusions: { cardinality: LIST, description: "groupId:artifactId of each exclusion." }
+    module: "Which module declares it."
+
+- name: ProjectManagedVersion
+  visibility: internal
+  userAnchor: false
+  description: "A version a module's dependencyManagement pins — its own, its parent's, and every imported BOM's, flattened as Maven applies them. For a Spring Boot project these are the ~1,500 versions Boot pins. Reach it from (:JavaProject {key})-[:MANAGES]->."
+  virtualJoins:
+    - { anchorLabel: JavaProject, relationship: MANAGES, keyField: key, recordKeyField: anchorKey, producer: projectManaged,
+        description: "(:JavaProject {key:$project})-[:MANAGES]->(v:ProjectManagedVersion)" }
+  properties:
+    id: { identity: true, description: "Module and coordinates." }
+    coordinates: "groupId:artifactId:version."
+    groupId: "Maven groupId."
+    artifactId: "Maven artifactId."
+    version: "The managed version."
+    module: "Which module's management."
+
+- name: ProjectJar
+  visibility: internal
+  userAnchor: false
+  description: "An artifact in a module's dependency tree with its jar downloaded into the world's repository: `jarPath` is the key the `jar` and `source` kinds read, so a project's dependencies reach their classes, source and (for Spring Boot) documented properties. Slower than DEPENDS_ON the first time. Reach it from (:JavaProject {key})-[:HAS_JAR]->."
+  virtualJoins:
+    - { anchorLabel: JavaProject, relationship: HAS_JAR, keyField: key, recordKeyField: anchorKey, producer: projectJars,
+        description: "(:JavaProject {key:$project})-[:HAS_JAR]->(j:ProjectJar)" }
+  properties:
+    id: { identity: true, description: "Module and coordinates." }
+    coordinates: "groupId:artifactId:version."
+    groupId: "Maven groupId."
+    artifactId: "Maven artifactId."
+    version: "Version."
+    jarPath: "The jar, relative to the world's repository; null when it has none."
+    module: "Which module's tree."
