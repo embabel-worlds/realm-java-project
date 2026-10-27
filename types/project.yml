@@ -18,6 +18,13 @@
 # resolved as the file resolves them; `qualifiedName` is null where an on-demand import could
 # supply a name and the source alone cannot say which.
 
+- name: JavaProject
+  visibility: internal
+  userAnchor: false
+  description: "A Java project, named by its key: a repository URL, optionally @ref (`https://github.com/acme/shop@v2`), or a folder (under the world's data/, or in the owner's mounted workspace). Pin it — (:JavaProject {key: $project}) — and every hop below reads it when the query reaches it. Nothing about it is stored."
+  properties:
+    key: { identity: true, description: "The project key, exactly as given." }
+
 - name: JavaProjectType
   parents: [CodeType]
   visibility: internal
