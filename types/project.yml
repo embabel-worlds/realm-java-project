@@ -52,6 +52,7 @@
     project: "The project as read: the folder, or host/repo@commit."
 
 - name: JavaProjectMember
+  parents: [SourceDeclaration]
   visibility: internal
   userAnchor: false
   description: "A field, constructor or method a Java project declares. A field's `type`, a method's `returnType` and `parameterTypes` are resolved names; `annotations` too. Reach it from (:JavaProject {key})-[:DECLARES_MEMBER]->; its type is the JavaProjectType whose `name` is its `owner`."
@@ -73,6 +74,9 @@
     module: "Maven module directory."
     line: { type: int, description: "Line it is declared on." }
     link: "The line on the repository's host."
+    url: "The line on the repository's host (the same as `link`, under the name every language's rows use)."
+    language: "java"
+    project: "The project as read: the folder, or host/repo@commit."
 
 - name: JavaProjectAnnotation
   visibility: internal
@@ -99,6 +103,7 @@
     link: "The line on the repository's host."
 
 - name: JavaProjectImport
+  parents: [SourceImport]
   visibility: internal
   userAnchor: false
   description: "One import in a Java project's source. Which packages a project's code uses, file by file. Reach it from (:JavaProject {key})-[:HAS_IMPORT]->."
@@ -115,6 +120,9 @@
     module: "Maven module directory."
     line: { type: int, description: "Line it is on." }
     link: "The line on the repository's host."
+    url: "The line on the repository's host (the same as `link`, under the name every language's rows use)."
+    language: "java"
+    project: "The project as read: the folder, or host/repo@commit."
 
 - name: ProjectSetting
   visibility: internal
