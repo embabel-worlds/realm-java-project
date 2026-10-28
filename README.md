@@ -30,5 +30,5 @@ Public repositories only, for now. A commit is read once and kept; a folder is r
 
 It knows no framework: an annotation is its name and attributes as written. `realm-spring` gives them meaning.
 
-Requires an Embabel appliance with the `source` and `maven` producer kinds' `from: project`.
-Java source only; Kotlin is not read yet.
+Requires an Embabel appliance with the `source-tree` producer kind and the `maven` kind's `from: project`.
+Java source only for types, members, annotations and imports; Kotlin is not read yet.

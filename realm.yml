@@ -13,8 +13,8 @@ description: |
 
   Nothing is ingested and nothing is stored: a commit is read once and kept; a folder is read
   afresh. It knows no framework — an annotation is its name and its attributes as written — which
-  is what a framework's realm (realm-spring) gives meaning. Requires the appliance's `source`
-  (`from: project`) and `maven` (`from: project`) producer kinds.
+  is what a framework's realm (realm-spring) gives meaning. Requires the appliance's `source-tree`
+  and `maven` (`from: project`) producer kinds.
 version: 0.1.0
 maturity: experimental
 realmLabel: JavaBuild
