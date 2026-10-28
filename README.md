@@ -5,6 +5,8 @@ Its Maven build (every module, the dependency tree Maven resolves, the versions 
 own source (every type, member, annotation and import, and every setting in its `.properties` and YAML
 files), each linked to the exact line. Nothing is ingested and nothing is stored.
 
+**Install [realm-code-model](https://github.com/embabel-worlds/realm-code-model) with it.** This realm's types extend parents declared there (`SourceDeclaration`, `SourceImport`, `CodeType`). Without it the realm still loads, but its types lose those parents, so a query that names a parent finds none of its rows.
+
 ```cypher
 MATCH (p:JavaProject {key: 'https://github.com/spring-projects/spring-petclinic'})-[:HAS_ANNOTATION]->(a:JavaProjectAnnotation {name: 'Transactional'})
 RETURN a.targetName, a.attributes, a.link
