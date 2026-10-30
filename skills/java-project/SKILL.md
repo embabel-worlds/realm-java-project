@@ -1,6 +1,6 @@
 ---
 name: java-project
-description: Read a Java project — a repository URL or a folder — as a graph: its Maven modules, resolved dependency tree, managed versions, types, members, annotations, imports and config settings, each linked to the line. Use when someone asks about the structure, dependencies or code of a specific Java project.
+description: "Read a Java project — a repository URL or a folder — as a graph: its Maven modules, resolved dependency tree, managed versions, types, members, annotations, imports and config settings, each linked to the line. Use when someone asks about the structure, dependencies or code of a specific Java project."
 ---
 
 # Reading a Java project
