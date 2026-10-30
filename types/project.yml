@@ -173,6 +173,7 @@
     name: "The POM's <name>."
     parent: "The parent POM's coordinates."
     module: "Its directory in the project; '' for the root."
+    project: "The project as read: the folder, or host/repo@commit."
 
 - name: ProjectDependency
   visibility: internal
@@ -193,6 +194,7 @@
     parent: "Coordinates of the artifact that brought it in."
     path: { cardinality: LIST, description: "Coordinates from the module down to it." }
     module: "Which module's tree; '' for the root."
+    project: "The project as read: the folder, or host/repo@commit."
 
 - name: ProjectDeclaredDependency
   visibility: internal
@@ -211,6 +213,7 @@
     optional: { type: boolean, description: "Declared optional." }
     exclusions: { cardinality: LIST, description: "groupId:artifactId of each exclusion." }
     module: "Which module declares it."
+    project: "The project as read: the folder, or host/repo@commit."
 
 - name: ProjectManagedVersion
   visibility: internal
@@ -226,6 +229,7 @@
     artifactId: "Maven artifactId."
     version: "The managed version."
     module: "Which module's management."
+    project: "The project as read: the folder, or host/repo@commit."
 
 - name: ProjectJar
   visibility: internal
@@ -242,3 +246,4 @@
     version: "Version."
     jarPath: "The jar, relative to the world's repository; null when it has none."
     module: "Which module's tree."
+    project: "The project as read: the folder, or host/repo@commit."
