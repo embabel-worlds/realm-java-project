@@ -166,7 +166,11 @@
     parent: "The parent POM's coordinates."
     module: "Its directory in the project; '' for the root."
 
+# The artifact family's first child: `parents: [Dependency]` is the worked example the standard model's
+# artifact.yml gives, so `(p {key:$project})-[:DEPENDS_ON]->(d:Dependency)` is answered by this realm. The
+# scalar property `parent` below is unrelated — the coordinates of the artifact that brought a dependency in.
 - name: ProjectDependency
+  parents: [Dependency]
   visibility: internal
   userAnchor: false
   description: "An artifact in a module's dependency tree as Maven resolves it — versions settled by Maven's rules, BOMs and parents applied — the module itself first at depth 0. `scope` and `optional` as Maven derives them. Reach it from (:JavaProject {key})-[:DEPENDS_ON]->."
