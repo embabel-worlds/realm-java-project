@@ -169,11 +169,15 @@
 # The artifact family's first child: `parents: [Dependency]` is the worked example the standard model's
 # artifact.yml gives, so `(p {key:$project})-[:DEPENDS_ON]->(d:Dependency)` is answered by this realm. The
 # scalar property `parent` below is unrelated — the coordinates of the artifact that brought a dependency in.
+#
+# The Dependency contract's `ecosystem`, `name` and `direct` are computed per row by the `projectDependencies`
+# producer (producers/build.yml); `version` and `scope` are the row's own under the contract's names. A child
+# inherits properties and labels but not visibility, userAnchor, description or identity, so those are restated.
 - name: ProjectDependency
   parents: [Dependency]
   visibility: internal
   userAnchor: false
-  description: "An artifact in a module's dependency tree as Maven resolves it — versions settled by Maven's rules, BOMs and parents applied — the module itself first at depth 0. `scope` and `optional` as Maven derives them. Reach it from (:JavaProject {key})-[:DEPENDS_ON]->."
+  description: "An artifact in a module's dependency tree as Maven resolves it — versions settled by Maven's rules, BOMs and parents applied — the module itself first at depth 0. `scope` and `optional` as Maven derives them. It is a Dependency: name :Dependency to read every ecosystem, :ProjectDependency for Maven alone; `ecosystem` is 'maven', `name` is `groupId:artifactId`, `direct` is true at depth 1. Reach it from (:JavaProject {key})-[:DEPENDS_ON]->."
   virtualJoins:
     - { anchorLabel: JavaProject, relationship: DEPENDS_ON, keyField: key, recordKeyField: anchorKey, producer: projectDependencies,
         description: "(:JavaProject {key:$project})-[:DEPENDS_ON]->(d:ProjectDependency)" }
@@ -182,18 +186,26 @@
     coordinates: "groupId:artifactId:version."
     groupId: "Maven groupId."
     artifactId: "Maven artifactId."
-    version: "The version Maven settled on."
-    scope: "compile, runtime, …"
+    version: "The version Maven settled on. The Dependency contract's `version`."
+    scope: "compile, runtime, … The Dependency contract's `scope`; Maven's own words, as the contract asks. Null on the module's own row at depth 0."
     optional: { type: boolean, description: "Declared optional." }
     depth: { type: int, description: "0 for the module, 1 for what it declares, …" }
     parent: "Coordinates of the artifact that brought it in."
     path: { cardinality: LIST, description: "Coordinates from the module down to it." }
     module: "Which module's tree; '' for the root."
+    # The Dependency contract, computed by the producer.
+    ecosystem: "'maven' on every row."
+    name: "`groupId:artifactId`: the artifact without its version, as the Artifact contract spells a Maven name."
+    direct: { type: boolean, description: "True at depth 1 — declared by the module itself. False deeper, and false on the module's own row at depth 0, which is no dependency of itself: `WHERE d.direct` is what the module declares and nothing else." }
 
+# What a POM declares is a Dependency too — the same contract, before Maven's resolution rather than after
+# — so a query naming :Dependency reaches both readings of a module's dependencies, and `direct` tells them
+# apart from the tree's transitive rows: a declared dependency is direct by definition.
 - name: ProjectDeclaredDependency
+  parents: [Dependency]
   visibility: internal
   userAnchor: false
-  description: "A dependency a module's POM declares, after inheritance and management: the version shown is the one Maven applies, whoever pinned it. Reach it from (:JavaProject {key})-[:DECLARES_DEPENDENCY]->."
+  description: "A dependency a module's POM declares, after inheritance and management: the version shown is the one Maven applies, whoever pinned it. It is a Dependency, always `direct`: `ecosystem` is 'maven', `name` is `groupId:artifactId`. Reach it from (:JavaProject {key})-[:DECLARES_DEPENDENCY]->."
   virtualJoins:
     - { anchorLabel: JavaProject, relationship: DECLARES_DEPENDENCY, keyField: key, recordKeyField: anchorKey, producer: projectDeclared,
         description: "(:JavaProject {key:$project})-[:DECLARES_DEPENDENCY]->(d:ProjectDeclaredDependency)" }
@@ -202,11 +214,15 @@
     coordinates: "groupId:artifactId:version."
     groupId: "Maven groupId."
     artifactId: "Maven artifactId."
-    version: "The version Maven applies."
-    scope: "Declared scope."
+    version: "The version Maven applies. The Dependency contract's `version`."
+    scope: "Declared scope. The Dependency contract's `scope`; null when the POM leaves it to Maven's default."
     optional: { type: boolean, description: "Declared optional." }
     exclusions: { cardinality: LIST, description: "groupId:artifactId of each exclusion." }
     module: "Which module declares it."
+    # The Dependency contract, computed by the producer.
+    ecosystem: "'maven' on every row."
+    name: "`groupId:artifactId`."
+    direct: { type: boolean, description: "Always true: a POM declares only what the module itself depends on." }
 
 - name: ProjectManagedVersion
   visibility: internal
@@ -223,10 +239,14 @@
     version: "The managed version."
     module: "Which module's management."
 
+# The downloaded jar is the Maven ecosystem's Artifact (artifact.yml): the published, versioned unit itself,
+# as realm-java-code's JavaArtifact is for a jar pinned by path. `ecosystem` and `name` are computed by the
+# `projectJars` producer; `version` is the row's own. The same jar read by both realms has the same three values.
 - name: ProjectJar
+  parents: [Artifact]
   visibility: internal
   userAnchor: false
-  description: "An artifact in a module's dependency tree with its jar downloaded into the world's repository: `jarPath` is the key the `jar` and `source` kinds read, so a project's dependencies reach their classes, source and (for Spring Boot) documented properties. Slower than DEPENDS_ON the first time. Reach it from (:JavaProject {key})-[:HAS_JAR]->."
+  description: "An artifact in a module's dependency tree with its jar downloaded into the world's repository: `jarPath` is the key the `jar` and `source` kinds read, so a project's dependencies reach their classes, source and (for Spring Boot) documented properties. It is an Artifact: name :Artifact to read every ecosystem, :ProjectJar for a project's Maven jars; `ecosystem` is 'maven', `name` is `groupId:artifactId`. Slower than DEPENDS_ON the first time. Reach it from (:JavaProject {key})-[:HAS_JAR]->."
   virtualJoins:
     - { anchorLabel: JavaProject, relationship: HAS_JAR, keyField: key, recordKeyField: anchorKey, producer: projectJars,
         description: "(:JavaProject {key:$project})-[:HAS_JAR]->(j:ProjectJar)" }
@@ -235,6 +255,9 @@
     coordinates: "groupId:artifactId:version."
     groupId: "Maven groupId."
     artifactId: "Maven artifactId."
-    version: "Version."
+    version: "Version. The Artifact contract's `version`."
     jarPath: "The jar, relative to the world's repository; null when it has none."
     module: "Which module's tree."
+    # The Artifact contract, computed by the producer.
+    ecosystem: "'maven' on every row."
+    name: "`groupId:artifactId`: the artifact without its version."

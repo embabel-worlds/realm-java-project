@@ -5,7 +5,9 @@ Its Maven build (every module, the dependency tree Maven resolves, the versions 
 own source (every type, member, annotation and import, and every setting in its `.properties` and YAML
 files), each linked to the exact line. Nothing is ingested and nothing is stored.
 
-**Install [realm-code-model](https://github.com/embabel-worlds/realm-code-model) with it.** This realm's types extend parents declared there (`SourceDeclaration`, `SourceImport`, `CodeType`). Without it the realm still loads, but its types lose those parents, so a query that names a parent finds none of its rows.
+**Install [realm-code-model](https://github.com/embabel-worlds/realm-code-model) with it.** This realm's types extend parents declared there (`SourceDeclaration`, `SourceImport`, `CodeType`, and the artifact family: `Dependency` for `ProjectDependency` and `ProjectDeclaredDependency`, `Artifact` for `ProjectJar`). Without it the realm still loads, but its types lose those parents, so a query that names a parent finds none of its rows.
+
+The build is read under the shared artifact labels too: `(p:JavaProject {key: $project})-[:DEPENDS_ON]->(d:Dependency) WHERE d.direct` is what the module declares, with `ecosystem: 'maven'`, `name` (`groupId:artifactId`), `version` and `scope`; `(p)-[:HAS_JAR]->(a:Artifact)` is each dependency's jar as an `Artifact`. The `maven` producers compute `ecosystem`, `name` and `direct` per row (`producers/build.yml`).
 
 ```cypher
 MATCH (p:JavaProject {key: 'https://github.com/spring-projects/spring-petclinic'})-[:HAS_ANNOTATION]->(a:JavaProjectAnnotation {name: 'Transactional'})

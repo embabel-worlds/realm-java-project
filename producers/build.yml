@@ -4,8 +4,43 @@
 # The tree does not download jars, so it is quick; `projectJars` is the same tree with every jar
 # downloaded into the world's repository, for the questions that need what a jar says (its
 # classes, its source, a Spring Boot jar's documented properties).
+#
+# THE ARTIFACT FAMILY'S CONTRACTS (realm-code-model types/artifact.yml). ProjectDependency and
+# ProjectDeclaredDependency are `parents: [Dependency]`, ProjectJar is `parents: [Artifact]`
+# (types/project.yml), so the producers below project each contract's names onto their rows with a
+# `compute:` block: one Cypher expression per property over the record bound as `r`, the row as the
+# `maven` kind emits it (`coordinates`, `groupId`, `artifactId`, `version`, `scope`, `optional`,
+# `depth`, `parent`, `path`, `module`, `jarPath`; engine MavenReads). The `maven` kind carries
+# `compute:` (engine MavenProducer, beside `jar`, `files` and `remote`), so the block runs. `version`
+# and `scope` need nothing: the rows already spell them as the contract does. `ecosystem` is the
+# constant 'maven'; `name` is `groupId:artifactId`, the Artifact spelling of a Maven name; `direct` is
+# depth 1 in the resolved tree (depth 0 is the module itself, no dependency of its own) and always
+# true for what a POM declares.
 - { name: projectModules,      kind: maven, from: project, emit: artifact, download: false }
-- { name: projectDependencies, kind: maven, from: project, emit: tree, download: false }
-- { name: projectDeclared,     kind: maven, from: project, emit: dependencies }
+- name: projectDependencies
+  kind: maven
+  from: project
+  emit: tree
+  download: false
+  compute:                           # the Dependency contract; `r` is the tree row
+    ecosystem: "'maven'"
+    name: "r.groupId + ':' + r.artifactId"
+    direct: "r.depth = 1"
+- name: projectDeclared
+  kind: maven
+  from: project
+  emit: dependencies
+  compute:                           # the Dependency contract; a declaration is direct by definition
+    ecosystem: "'maven'"
+    name: "r.groupId + ':' + r.artifactId"
+    direct: "true"
 - { name: projectManaged,      kind: maven, from: project, emit: managed }
-- { name: projectJars,         kind: maven, from: project, emit: tree, download: true, sources: false }
+- name: projectJars
+  kind: maven
+  from: project
+  emit: tree
+  download: true
+  sources: false
+  compute:                           # the Artifact contract; `version` is the row's own
+    ecosystem: "'maven'"
+    name: "r.groupId + ':' + r.artifactId"
