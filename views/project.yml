@@ -169,3 +169,21 @@
     WHERE package = $package AND sourceSet = $sourceSet
     RETURN f.fileName AS file, f.extension AS language, f.path AS path, f.link AS link
     ORDER BY file LIMIT 2000
+
+- name: ProjectLanguages
+  description: >-
+    What a project is written in: its files counted by extension, with how many are under src/main
+    and src/test and how many modules hold them. Every file is counted, not only JVM source, so a
+    build with TypeScript, Python or templates beside its Kotlin and Java shows them.
+  params:
+    project: { type: string, description: "Project key." }
+  cypher: |
+    MATCH (p:JavaProject {key: $project})-[:HAS_FILE]->(f:ProjectFile)
+    WHERE f.extension IS NOT NULL AND f.extension <> ''
+    WITH f.extension AS extension, f,
+         CASE WHEN ('/' + f.path) CONTAINS '/src/test/' THEN 'test' WHEN ('/' + f.path) CONTAINS '/src/main/' THEN 'main' ELSE 'other' END AS place
+    RETURN extension, count(f) AS files,
+           count(CASE WHEN place = 'main' THEN 1 END) AS mainFiles,
+           count(CASE WHEN place = 'test' THEN 1 END) AS testFiles,
+           count(DISTINCT f.module) AS modules
+    ORDER BY files DESC LIMIT 80
