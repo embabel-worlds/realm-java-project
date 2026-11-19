@@ -170,7 +170,7 @@
     RETURN f.fileName AS file, f.extension AS language, f.path AS path, f.link AS link
     ORDER BY file LIMIT 2000
 
-- name: ProjectLanguages
+- name: FilesByExtension
   description: >-
     What a project is written in: its files counted by extension, with how many are under src/main
     and src/test and how many modules hold them. Every file is counted, not only JVM source, so a
