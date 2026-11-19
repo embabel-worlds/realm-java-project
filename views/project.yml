@@ -114,3 +114,58 @@
     RETURN d.depth AS depth, d.coordinates AS coordinates, d.scope AS scope, d.optional AS optional,
            d.parent AS via
     LIMIT 2000
+
+# NAVIGATION: project → module → package → file. Read from the project's files, so it covers every
+# JVM language in the build, not only the Java the type and member joins parse.
+
+- name: ModuleSources
+  description: >-
+    Each Maven module of a project with how many source files it holds, main and test, and in which
+    languages. The first step down from a project: pick a module, then ask ModulePackages.
+  params:
+    project: { type: string, description: "Project key." }
+  cypher: |
+    MATCH (p:JavaProject {key: $project})-[:HAS_MODULE]->(m:ProjectModule)
+    OPTIONAL MATCH (p)-[:HAS_FILE]->(f:ProjectFile)
+    WHERE f.module = m.module AND f.extension IN ['java', 'kt', 'kts', 'groovy', 'scala'] AND ('/' + f.path) CONTAINS '/src/'
+    WITH m, f, split(split('/' + f.path, '/src/')[1], '/')[0] AS sourceSet
+    RETURN m.module AS module, m.coordinates AS coordinates, m.packaging AS packaging, m.name AS name,
+           count(CASE WHEN sourceSet = 'main' THEN 1 END) AS mainFiles,
+           count(CASE WHEN sourceSet = 'test' THEN 1 END) AS testFiles,
+           [x IN collect(DISTINCT f.extension) WHERE x IS NOT NULL] AS languages
+    ORDER BY mainFiles DESC, module LIMIT 500
+
+- name: ModulePackages
+  description: >-
+    The packages of one Maven module, by source set (main, test), with how many source files each
+    holds and in which languages. A package is the directory under `src/<set>/<language>/`.
+  params:
+    project: { type: string, description: "Project key." }
+    module: { type: string, default: "", description: "The module's directory, as ModuleSources gives it; '' for the root." }
+  cypher: |
+    MATCH (p:JavaProject {key: $project})-[:HAS_FILE]->(f:ProjectFile)
+    WHERE f.module = $module AND f.extension IN ['java', 'kt', 'kts', 'groovy', 'scala'] AND ('/' + f.path) CONTAINS '/src/'
+    WITH f, split(split('/' + f.path, '/src/')[1], '/') AS parts
+    WITH parts[0] AS sourceSet, f,
+         reduce(s = '', x IN parts[2..size(parts) - 1] | CASE WHEN s = '' THEN x ELSE s + '.' + x END) AS package
+    RETURN package, sourceSet, count(f) AS files, collect(DISTINCT f.extension) AS languages
+    ORDER BY sourceSet, package LIMIT 3000
+
+- name: PackageFiles
+  description: >-
+    The source files of one package in one module and source set, each with a link to it on the
+    repository's host.
+  params:
+    project: { type: string, description: "Project key." }
+    module: { type: string, default: "", description: "The module's directory; '' for the root." }
+    package: { type: string, description: "Dotted package name, as ModulePackages gives it; '' for the default package." }
+    sourceSet: { type: string, default: "main", description: "main or test." }
+  cypher: |
+    MATCH (p:JavaProject {key: $project})-[:HAS_FILE]->(f:ProjectFile)
+    WHERE f.module = $module AND f.extension IN ['java', 'kt', 'kts', 'groovy', 'scala'] AND ('/' + f.path) CONTAINS '/src/'
+    WITH f, split(split('/' + f.path, '/src/')[1], '/') AS parts
+    WITH f, parts[0] AS sourceSet,
+         reduce(s = '', x IN parts[2..size(parts) - 1] | CASE WHEN s = '' THEN x ELSE s + '.' + x END) AS package
+    WHERE package = $package AND sourceSet = $sourceSet
+    RETURN f.fileName AS file, f.extension AS language, f.path AS path, f.link AS link
+    ORDER BY file LIMIT 2000
