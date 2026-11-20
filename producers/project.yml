@@ -2,9 +2,9 @@
 # Every key is a project key; every row names its file, line, module, project and a link to the line.
 # Types, members, annotations and imports are read from the Java files, by binary name; settings and
 # files from every file of the project.
-- { name: projectTypes,       kind: source-tree, emit: types,        languages: [java] }
-- { name: projectMembers,     kind: source-tree, emit: members,      languages: [java] }
-- { name: projectAnnotations, kind: source-tree, emit: annotations,  languages: [java] }
-- { name: projectImports,     kind: source-tree, emit: imports,      languages: [java] }
-- { name: projectSettings,    kind: source-tree, emit: configs }
-- { name: projectFiles,       kind: source-tree, emit: projectFiles }
+- { name: projectTypes,       kind: source-tree, emit: types,        languages: [java], cache: { kind: graph, validFor: revision } }
+- { name: projectMembers,     kind: source-tree, emit: members,      languages: [java], cache: { kind: graph, validFor: revision } }
+- { name: projectAnnotations, kind: source-tree, emit: annotations,  languages: [java], cache: { kind: graph, validFor: revision } }
+- { name: projectImports,     kind: source-tree, emit: imports,      languages: [java], cache: { kind: graph, validFor: revision } }
+- { name: projectSettings,    kind: source-tree, emit: configs, cache: { kind: graph, validFor: revision } }
+- { name: projectFiles,       kind: source-tree, emit: projectFiles, cache: { kind: graph, validFor: revision } }
