@@ -1,0 +1,55 @@
+# What a project is built with, read from its files and settings alone: the same for a repository on
+# any forge or a folder on disk. A forge's own language table (bytes per language) is a forge realm's
+# view; this one counts files, which every source has.
+
+- name: ProjectProfile
+  description: >-
+    What a project is built with: build tools, framework settings and file mix. SELECT THIS for
+    "what kind of project is this", "is it Spring Boot or Node", "what build tool does it use",
+    "describe the project". One row: the build tools and package managers read off the manifests at
+    the project root (pom.xml, build.gradle, package.json, pyproject.toml, go.mod, Cargo.toml,
+    Dockerfile, flake.nix and the like), whether it carries CI workflow files (.github/workflows,
+    .gitlab-ci.yml, Jenkinsfile), how many Spring settings its configuration declares (spring.*,
+    and spring.ai.* for Spring AI), the file count by extension, and an opinion sentence assembled
+    from exactly those facts by rule. Not a language share by bytes: that is a forge's table (for
+    GitHub, GitHubRepositoryLanguages). A framework named only inside package.json is not seen.
+  params:
+    project: { type: string, required: true, description: "Project key: a repository URL, optionally @ref, or a folder." }
+  cypher: |
+    MATCH (:JavaProject {key: $project})-[:HAS_FILE]->(f:ProjectFile)
+    WITH collect({path: f.path, name: f.fileName, ext: f.extension}) AS files
+    WITH files,
+         [x IN files WHERE NOT x.path CONTAINS '/' | x.name] AS rootFiles,
+         size([x IN files WHERE x.path STARTS WITH '.github/workflows/' OR x.name IN ['.gitlab-ci.yml', 'Jenkinsfile', 'bitbucket-pipelines.yml'] OR x.path STARTS WITH '.circleci/']) AS ciFiles
+    WITH files, rootFiles, ciFiles,
+         [t IN [
+            CASE WHEN 'pom.xml' IN rootFiles THEN 'Maven' ELSE '' END,
+            CASE WHEN any(n IN rootFiles WHERE n IN ['build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts']) THEN 'Gradle' ELSE '' END,
+            CASE WHEN 'package.json' IN rootFiles THEN CASE WHEN 'pnpm-lock.yaml' IN rootFiles THEN 'pnpm' WHEN 'yarn.lock' IN rootFiles THEN 'Yarn' ELSE 'npm' END ELSE '' END,
+            CASE WHEN 'pyproject.toml' IN rootFiles THEN 'Python (pyproject)' WHEN any(n IN rootFiles WHERE n STARTS WITH 'requirements') THEN 'pip' ELSE '' END,
+            CASE WHEN 'go.mod' IN rootFiles THEN 'Go modules' ELSE '' END,
+            CASE WHEN 'Cargo.toml' IN rootFiles THEN 'Cargo' ELSE '' END,
+            CASE WHEN 'Gemfile' IN rootFiles THEN 'Bundler' ELSE '' END,
+            CASE WHEN any(n IN rootFiles WHERE n ENDS WITH '.sln' OR n ENDS WITH '.csproj') THEN '.NET' ELSE '' END,
+            CASE WHEN 'CMakeLists.txt' IN rootFiles THEN 'CMake' WHEN 'Makefile' IN rootFiles THEN 'Make' ELSE '' END,
+            CASE WHEN any(n IN rootFiles WHERE n STARTS WITH 'Dockerfile' OR n STARTS WITH 'docker-compose' OR n STARTS WITH 'compose.') THEN 'Docker' ELSE '' END,
+            CASE WHEN 'flake.nix' IN rootFiles THEN 'Nix' ELSE '' END,
+            CASE WHEN ciFiles > 0 THEN 'CI workflows' ELSE '' END
+         ] WHERE t <> ''] AS buildTools
+    OPTIONAL MATCH (:JavaProject {key: $project})-[:HAS_SETTING]->(s:ProjectSetting)
+    WITH files, buildTools,
+         sum(CASE WHEN s.name STARTS WITH 'spring.' THEN 1 ELSE 0 END) AS springSettings,
+         sum(CASE WHEN s.name STARTS WITH 'spring.ai.' THEN 1 ELSE 0 END) AS springAiSettings,
+         count(DISTINCT CASE WHEN s.name STARTS WITH 'spring.' THEN s.path ELSE null END) AS springSettingFiles
+    UNWIND files AS fx
+    WITH buildTools, springSettings, springAiSettings, springSettingFiles, size(files) AS fileCount, coalesce(fx.ext, '') AS ext, count(*) AS n
+    ORDER BY n DESC
+    WITH buildTools, springSettings, springAiSettings, springSettingFiles, fileCount,
+         collect(CASE WHEN ext = '' THEN null ELSE ext + ':' + toString(n) END)[0..8] AS filesByExtension
+    RETURN buildTools,
+           CASE WHEN springSettings = 0 THEN [] ELSE ['Spring Boot'] + CASE WHEN springAiSettings > 0 THEN ['Spring AI'] ELSE [] END END AS frameworks,
+           springSettings, springAiSettings, springSettingFiles, fileCount, filesByExtension,
+           'A project of ' + toString(fileCount) + ' files (' + reduce(a = '', x IN filesByExtension | CASE WHEN a = '' THEN x ELSE a + ', ' + x END) + ')'
+             + CASE WHEN size(buildTools) = 0 THEN ' with no build manifest at its root' ELSE ' built with ' + reduce(a = '', x IN buildTools | CASE WHEN a = '' THEN x ELSE a + ', ' + x END) END
+             + CASE WHEN springSettings > 0 THEN '; Spring Boot, judging by ' + toString(springSettings) + ' spring.* settings in ' + toString(springSettingFiles) + ' configuration files' + CASE WHEN springAiSettings > 0 THEN ', ' + toString(springAiSettings) + ' of them Spring AI' ELSE '' END ELSE '; no Spring settings in its configuration' END
+             + '.' AS opinion
