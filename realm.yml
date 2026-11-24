@@ -20,3 +20,7 @@ maturity: experimental
 realmLabel: JavaBuild
 author: Embabel
 tags: [java, maven, source, code, project]
+# Its types extend the standard model's parents (CodeType, SourceDeclaration, SourceImport), declared
+# by realm-code-model; without it a query naming a parent finds none of these rows.
+requires:
+  code-model: "[0.1.0,1.0.0)"
