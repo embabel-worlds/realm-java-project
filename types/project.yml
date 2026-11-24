@@ -24,6 +24,20 @@
   description: "A Java project, named by its key: a repository URL, optionally @ref (`https://github.com/acme/shop@v2`), or a folder (under the world's data/, or in the owner's mounted workspace). Pin it — (:JavaProject {key: $project}) — and every hop below reads it when the query reaches it. Nothing about it is stored."
   properties:
     key: { identity: true, description: "The project key, exactly as given." }
+  examples:
+    - q: "Which classes in https://github.com/acme/shop are annotated @Transactional, and where?"
+      cypher: |
+        MATCH (p:JavaProject {key: 'https://github.com/acme/shop'})-[:HAS_ANNOTATION]->(a:JavaProjectAnnotation {name: 'Transactional'})
+        RETURN a.targetKind AS on, a.owner AS type, a.targetName AS target, a.path AS file, a.line AS line, a.link AS link
+    - q: "Why is commons-logging in the shop project's build?"
+      cypher: |
+        MATCH (p:JavaProject {key: 'https://github.com/acme/shop'})-[:DEPENDS_ON]->(d:ProjectDependency {artifactId: 'commons-logging'})
+        RETURN d.module AS module, d.coordinates AS resolved, d.scope AS scope, d.path AS path
+        ORDER BY d.depth
+    - q: "Where is server.port set in the shop project, and to what?"
+      cypher: |
+        MATCH (p:JavaProject {key: 'https://github.com/acme/shop'})-[:HAS_SETTING]->(s:ProjectSetting {name: 'server.port'})
+        RETURN s.value AS value, s.path AS file, s.document AS document, s.line AS line
 
 - name: JavaProjectType
   parents: [CodeType]
@@ -47,7 +61,7 @@
     path: "Source file, relative to the project."
     module: "Maven module directory holding it; '' for the root."
     line: { type: int, description: "Line it is declared on." }
-    lastLine: { type: int, description: "Its last line." }
+    lastLine: { type: int, description: "Line the declaration ends on (its closing brace), 1-based like `line`." }
     link: "The line on the repository's host, when it has one."
     project: "The project as read: the folder, or host/repo@commit."
 
@@ -64,7 +78,7 @@
     owner: "Binary name of the declaring type."
     name: "Member name."
     kind: "field, constructor or method."
-    type: "A field's declared type, resolved."
+    type: "A field's declared type, resolved to a binary name, e.g. `java.lang.String`, `int` or `java.util.List`; null for a constructor or a method."
     returnType: "A method's return type, resolved."
     parameters: { cardinality: LIST, description: "`<type> <name>` for each parameter." }
     parameterTypes: { cardinality: LIST, description: "Each parameter's type, resolved." }
@@ -75,7 +89,7 @@
     line: { type: int, description: "Line it is declared on." }
     link: "The line on the repository's host."
     url: "The line on the repository's host (the same as `link`, under the name every language's rows use)."
-    language: "java"
+    language: "Always `java`: the source language, under the name every language's rows carry, so a query across languages can tell them apart."
     project: "The project as read: the folder, or host/repo@commit."
 
 - name: JavaProjectAnnotation
@@ -90,7 +104,7 @@
     name: "The annotation's simple name as written, e.g. Profile."
     qualifiedName: "Resolved name; null when the source cannot say."
     attributes: { cardinality: LIST, description: "Each attribute as `name=value`; a list's elements comma-joined." }
-    value: "The single value, or the `value=` attribute; lists comma-joined."
+    value: "The single value, or the `value=` attribute, as text exactly as written (no unit or type conversion); lists comma-joined."
     values: { cardinality: LIST, description: "The same, as a list." }
     text: "The annotation as written."
     targetKind: "type, field, constructor, method or parameter."
@@ -113,7 +127,7 @@
   properties:
     id: { identity: true, description: "`<project>!<path>:<line>`." }
     name: "What is imported, e.g. javax.persistence.Entity."
-    packageName: "Its package."
+    packageName: "Dotted package of what is imported, e.g. `javax.persistence` for javax.persistence.Entity."
     isStatic: { type: boolean, description: "A static import." }
     isWildcard: { type: boolean, description: "An on-demand import (`.*`)." }
     path: "Source file."
@@ -121,7 +135,7 @@
     line: { type: int, description: "Line it is on." }
     link: "The line on the repository's host."
     url: "The line on the repository's host (the same as `link`, under the name every language's rows use)."
-    language: "java"
+    language: "Always `java`: the source language, under the name every language's rows carry, so a query across languages can tell them apart."
     project: "The project as read: the folder, or host/repo@commit."
 
 - name: ProjectSetting
@@ -134,9 +148,9 @@
   properties:
     id: { identity: true, description: "`<project>!<path>#<document>#<key>`." }
     name: "The key, flattened."
-    value: "The value as written; null for an empty or non-scalar one."
+    value: "The value as text exactly as written (no unit or type conversion, placeholders unresolved); null for an empty or non-scalar one."
     document: { type: int, description: "Which document of a multi-document YAML file, from 0." }
-    fileName: "The file's name, e.g. application-prod.yml."
+    fileName: "The settings file's name without its folder, e.g. application-prod.yml."
     path: "File path."
     module: "Maven module directory."
     line: { type: int, description: "Line it is on." }
@@ -152,7 +166,7 @@
   properties:
     id: { identity: true, description: "`<project>!<path>`." }
     path: "Path within the project."
-    fileName: "Its name."
+    fileName: "The file's name without its folder, e.g. `Owner.java`."
     extension: "Its extension, lower case."
     module: "Maven module directory."
     link: "Its page on the repository's host."
@@ -168,7 +182,7 @@
     coordinates: { identity: true, description: "groupId:artifactId:version." }
     groupId: "Maven groupId."
     artifactId: "Maven artifactId."
-    version: "Version."
+    version: "The module's version from its POM after inheritance, e.g. `3.4.0-SNAPSHOT`."
     packaging: "jar, pom, war, …"
     name: "The POM's <name>."
     parent: "The parent POM's coordinates."
@@ -190,7 +204,7 @@
     version: "The version Maven settled on."
     scope: "compile, runtime, …"
     optional: { type: boolean, description: "Declared optional." }
-    depth: { type: int, description: "0 for the module, 1 for what it declares, …" }
+    depth: { type: int, description: "Hops from the module, in units of one dependency edge: 0 for the module, 1 for what it declares, 2 for theirs, …" }
     parent: "Coordinates of the artifact that brought it in."
     path: { cardinality: LIST, description: "Coordinates from the module down to it." }
     module: "Which module's tree; '' for the root."
@@ -243,7 +257,7 @@
     coordinates: "groupId:artifactId:version."
     groupId: "Maven groupId."
     artifactId: "Maven artifactId."
-    version: "Version."
+    version: "The version Maven settled on, whose jar was downloaded."
     jarPath: "The jar, relative to the world's repository; null when it has none."
     module: "Which module's tree."
     project: "The project as read: the folder, or host/repo@commit."
