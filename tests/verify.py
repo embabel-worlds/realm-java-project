@@ -111,15 +111,21 @@ if rows is not None:
     for e, n in want.most_common(5):
         check((by.get(e) or {}).get('files') == n, f'L2 FilesByExtension {e} = {n}', by.get(e))
 
-# The file listing read cold, past any kept read, so a kept empty answer cannot hide a live one.
-try:
+# The file listing read cold (past any kept read) and then as a view would read it, so an empty kept
+# answer is told apart from an empty source.
+def listed(fresh):
+    hop = 'HAS_FILE {ai: {fresh: true}}' if fresh else 'HAS_FILE'
     d = post('/api/v1/admin/kg/execute', {'cypher':
-        f"MATCH (p:JavaProject {{key: '{PROJECT}'}})-[:HAS_FILE {{ai: {{fresh: true}}}}]->(f:ProjectFile) RETURN count(f) AS files"})
-    got = (d.get('rows') or [{}])[0].get('files')
-    check(got == len(paths), 'L2 HAS_FILE read fresh = every file at the commit', f'{got} vs {len(paths)}; ' +
-          json.dumps({k: v for k, v in d.items() if k != 'rows'})[:1500])
+        f"MATCH (p:JavaProject {{key: '{PROJECT}'}})-[:{hop}]->(f:ProjectFile) RETURN f.path AS path"})
+    return {r['path'] for r in d.get('rows') or []}, {k: v for k, v in d.items() if k not in ('rows', 'cypher')}
+try:
+    got, env = listed(True)
+    check(got == set(paths), 'L2 HAS_FILE read fresh = every file at the commit',
+          f'{len(got)} vs {len(paths)}; missing {sorted(set(paths) - got)[:10]}, extra {sorted(got - set(paths))[:10]}; {json.dumps(env)[:600]}')
+    again, env = listed(False)
+    check(again == got, 'L2 HAS_FILE read again (kept) = the fresh read', f'{len(again)} vs {len(got)}; {json.dumps(env)[:600]}')
 except Exception as e:
-    check(False, 'L2 HAS_FILE read fresh answers', str(e)[:300])
+    check(False, 'L2 HAS_FILE answers', str(e)[:300])
 
 rows = view('ModuleSources', P)
 if rows is not None:
