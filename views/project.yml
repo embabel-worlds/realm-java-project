@@ -84,8 +84,8 @@
   description: >-
     Why an artifact is in the resolved dependency tree: every path to it.
     By artifactId, or groupId:artifactId, from each module down, with the version Maven settled on.
-    Only the resolved tree; an artifact a POM declares but Maven excluded does not appear. Up to
-    100 paths, shallowest first.
+    Only the resolved runtime classpath (compile and runtime scope): a test-scoped or excluded
+    artifact does not appear. Up to 100 paths, shallowest first.
   params:
     project: { type: string, required: true, description: "Project key." }
     artifact: { type: string, required: true, description: "artifactId, or groupId:artifactId." }
@@ -115,7 +115,8 @@
 - name: DependencyTree
   description: >-
     One module's resolved dependency tree, in Maven's order, with depth and scope.
-    `module` is the module's directory ('' for the root). Only that one module; up to 2000 entries.
+    `module` is the module's directory ('' for the root). Only that one module, and only its runtime
+    classpath (compile and runtime scope, not test); up to 2000 entries.
   params:
     project: { type: string, required: true, description: "Project key." }
     module: { type: string, default: "", description: "Module directory; '' is the root." }

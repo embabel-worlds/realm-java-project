@@ -33,6 +33,8 @@ def view(name, args):
         check(False, f'L1 {name} answers', str(e)[:300]); return None
     err = d.get('error')
     check(not err, f'L1 {name} answers', str(err)[:300])
+    if not d.get('rows'):  # an empty answer says why in its envelope; keep that beside any failure
+        print(f'     {name} answered no rows: ' + json.dumps({k: v for k, v in d.items() if k != 'rows'})[:1500], flush=True)
     return d.get('rows') or []
 
 # ---- L0: the repository at the commit --------------------------------------------------------
@@ -56,7 +58,10 @@ pom = ET.fromstring(text('pom.xml'))
 ns = {'m': pom.tag.split('}')[0].strip('{')}
 def pt(e, tag): x = e.find(f'm:{tag}', ns); return x.text.strip() if x is not None and x.text else None
 coords = f"{pt(pom, 'groupId')}:{pt(pom, 'artifactId')}:{pt(pom, 'version')}"
-declared = {f"{pt(d, 'groupId')}:{pt(d, 'artifactId')}" for d in pom.findall('m:dependencies/m:dependency', ns)}
+# The tree is the runtime classpath (compile and runtime scope), as `mvn dependency:tree -Dscope=runtime`
+# prints it: a test-scoped declaration is not in it.
+declared = {f"{pt(d, 'groupId')}:{pt(d, 'artifactId')}" for d in pom.findall('m:dependencies/m:dependency', ns)
+            if pt(d, 'scope') != 'test'}
 
 def flatten(prefix, v, out):
     if isinstance(v, dict):
@@ -106,6 +111,16 @@ if rows is not None:
     for e, n in want.most_common(5):
         check((by.get(e) or {}).get('files') == n, f'L2 FilesByExtension {e} = {n}', by.get(e))
 
+# The file listing read cold, past any kept read, so a kept empty answer cannot hide a live one.
+try:
+    d = post('/api/v1/admin/kg/execute', {'cypher':
+        f"MATCH (p:JavaProject {{key: '{PROJECT}'}})-[:HAS_FILE {{ai: {{fresh: true}}}}]->(f:ProjectFile) RETURN count(f) AS files"})
+    got = (d.get('rows') or [{}])[0].get('files')
+    check(got == len(paths), 'L2 HAS_FILE read fresh = every file at the commit', f'{got} vs {len(paths)}; ' +
+          json.dumps({k: v for k, v in d.items() if k != 'rows'})[:1500])
+except Exception as e:
+    check(False, 'L2 HAS_FILE read fresh answers', str(e)[:300])
+
 rows = view('ModuleSources', P)
 if rows is not None:
     r = next((r for r in rows if r.get('module') == ''), {})
@@ -144,9 +159,9 @@ if rows is not None:
     direct = {':'.join(r['coordinates'].split(':')[:2]) for r in rows if r.get('depth') == 1}
     check(declared <= direct, 'L2 DependencyTree depth 1 holds every dependency the POM declares', sorted(declared - direct))
 
-rows = view('WhyIsItHere', dict(P, artifact='spring-boot-starter-web'))
+rows = view('WhyIsItHere', dict(P, artifact='spring-boot-starter-webmvc'))
 if rows is not None:
-    check(rows and min(r['depth'] for r in rows) == 1, 'L2 WhyIsItHere spring-boot-starter-web is declared directly', rows[:3])
+    check(rows and min(r['depth'] for r in rows) == 1, 'L2 WhyIsItHere spring-boot-starter-webmvc is declared directly', rows[:3])
 
 rows = view('VersionOf', dict(P, artifact='org.springframework:spring-core'))
 if rows is not None:
