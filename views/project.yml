@@ -5,10 +5,12 @@
 
 - name: ProjectOverview
   description: >-
-    What a project is: the commit or folder read, its modules, and how many types, source files,
-    settings and dependencies it has. The first call for any project, and proof the key resolves.
+    What a project is: the commit read, its modules, types, settings, dependencies.
+    The first call for any project, and proof the key resolves. Counts only: `types` is the Java
+    types the source declares (not Kotlin or other JVM languages), `dependencies` the distinct
+    resolved artifacts below the modules.
   params:
-    project: { type: string, description: "Project key: a repository URL, optionally @ref, or a folder." }
+    project: { type: string, required: true, description: "Project key: a repository URL, optionally @ref, or a folder." }
   cypher: |
     MATCH (p:JavaProject {key: $project})-[:HAS_MODULE]->(m:ProjectModule)
     WITH p, collect(m.coordinates) AS modules, head(collect(m.project)) AS read
@@ -22,10 +24,11 @@
 
 - name: ProjectModules
   description: >-
-    The modules of the project's Maven build: coordinates, packaging, parent, and the directory
-    each lives in ('' is the root).
+    The modules of the project's Maven build, with coordinates and packaging.
+    Each with its parent and the directory it lives in ('' is the root). Only modules the build's
+    reactor reads; up to 300.
   params:
-    project: { type: string, description: "Project key." }
+    project: { type: string, required: true, description: "Project key." }
   cypher: |
     MATCH (p:JavaProject {key: $project})-[:HAS_MODULE]->(m:ProjectModule)
     RETURN m.module AS module, m.coordinates AS coordinates, m.packaging AS packaging,
@@ -34,11 +37,13 @@
 
 - name: AnnotatedWith
   description: >-
-    Everything in the project carrying an annotation, by its simple name (`Transactional`,
-    `Deprecated`, `Test`): what it is on, its attributes, and a link to the line.
+    Everything in the project's own source carrying one annotation, by simple name.
+    For example `Transactional`, `Deprecated` or `Test`: what it is on, its attributes, and a link to
+    the line. Only Java source the project declares, not its dependencies' jars; the name matches
+    exactly as written (no package, no `@`); up to 500.
   params:
-    project: { type: string, description: "Project key." }
-    annotation: { type: string, description: "The annotation's simple name, e.g. Transactional." }
+    project: { type: string, required: true, description: "Project key." }
+    annotation: { type: string, required: true, description: "The annotation's simple name, e.g. Transactional." }
   cypher: |
     MATCH (p:JavaProject {key: $project})-[:HAS_ANNOTATION]->(a:JavaProjectAnnotation {name: $annotation})
     RETURN a.targetKind AS on, coalesce(a.owner + '#' + a.targetName, a.targetName) AS target,
@@ -47,11 +52,13 @@
 
 - name: UsesOfPackage
   description: >-
-    Which files import from a package (prefix match): `javax.`, `org.junit.Assert`, `com.acme.legacy`.
-    The way to find every place a library or an old API is still used.
+    Which files import from a package or class, by prefix.
+    For example `javax.`, `org.junit.Assert` or `com.acme.legacy`: the way to find every place a
+    library or an old API is still used. Only import statements in Java source; a fully qualified
+    name written inline without an import is not seen. Up to 500.
   params:
-    project: { type: string, description: "Project key." }
-    prefix: { type: string, description: "Package or class prefix, e.g. javax.persistence" }
+    project: { type: string, required: true, description: "Project key." }
+    prefix: { type: string, required: true, description: "Package or class prefix, e.g. javax.persistence" }
   cypher: |
     MATCH (p:JavaProject {key: $project})-[:HAS_IMPORT]->(i:JavaProjectImport)
     WHERE i.name STARTS WITH $prefix
@@ -60,11 +67,12 @@
 
 - name: SettingsNamed
   description: >-
-    Where a configuration key (prefix match) is set across the project's .properties and YAML
-    files, with each value, file, document and line.
+    Where a configuration key (by prefix) is set in .properties and YAML files.
+    With each value, file, document and line. Only what the project's own files set, not defaults a
+    framework applies or environment overrides; up to 500.
   params:
-    project: { type: string, description: "Project key." }
-    prefix: { type: string, description: "Key prefix, e.g. server. or spring.datasource" }
+    project: { type: string, required: true, description: "Project key." }
+    prefix: { type: string, required: true, description: "Key prefix, e.g. server. or spring.datasource" }
   cypher: |
     MATCH (p:JavaProject {key: $project})-[:HAS_SETTING]->(s:ProjectSetting)
     WHERE s.name STARTS WITH $prefix
@@ -74,11 +82,13 @@
 
 - name: WhyIsItHere
   description: >-
-    Why an artifact (by artifactId, or groupId:artifactId) is in the project's resolved
-    dependency tree: every path from a module down to it, and the version Maven settled on.
+    Why an artifact is in the resolved dependency tree: every path to it.
+    By artifactId, or groupId:artifactId, from each module down, with the version Maven settled on.
+    Only the resolved runtime classpath (compile and runtime scope): a test-scoped or excluded
+    artifact does not appear. Up to 100 paths, shallowest first.
   params:
-    project: { type: string, description: "Project key." }
-    artifact: { type: string, description: "artifactId, or groupId:artifactId." }
+    project: { type: string, required: true, description: "Project key." }
+    artifact: { type: string, required: true, description: "artifactId, or groupId:artifactId." }
   cypher: |
     MATCH (p:JavaProject {key: $project})-[:DEPENDS_ON]->(d:ProjectDependency)
     WHERE d.artifactId = $artifact OR d.groupId + ':' + d.artifactId = $artifact
@@ -88,12 +98,12 @@
 
 - name: VersionOf
   description: >-
-    Which version of an artifact the project resolves, which version its BOMs and parents
-    manage, and whether a module declares its own — the three answers that disagree when a
-    version override is pinning something old.
+    Which version of an artifact the project resolves, and which its BOMs manage.
+    And which modules resolve it: the answers that disagree when a version override is pinning
+    something old. Does not say which BOM or parent pinned the managed version.
   params:
-    project: { type: string, description: "Project key." }
-    artifact: { type: string, description: "artifactId, or groupId:artifactId." }
+    project: { type: string, required: true, description: "Project key." }
+    artifact: { type: string, required: true, description: "artifactId, or groupId:artifactId." }
   cypher: |
     MATCH (p:JavaProject {key: $project})-[:MANAGES]->(v:ProjectManagedVersion)
     WHERE v.artifactId = $artifact OR v.groupId + ':' + v.artifactId = $artifact
@@ -104,10 +114,11 @@
 
 - name: DependencyTree
   description: >-
-    One module's resolved dependency tree, in Maven's order, with depth and scope. `module` is the
-    module's directory ('' for the root).
+    One module's resolved dependency tree, in Maven's order, with depth and scope.
+    `module` is the module's directory ('' for the root). Only that one module, and only its runtime
+    classpath (compile and runtime scope, not test); up to 2000 entries.
   params:
-    project: { type: string, description: "Project key." }
+    project: { type: string, required: true, description: "Project key." }
     module: { type: string, default: "", description: "Module directory; '' is the root." }
   cypher: |
     MATCH (p:JavaProject {key: $project})-[:DEPENDS_ON]->(d:ProjectDependency {module: $module})
@@ -120,10 +131,11 @@
 
 - name: ModuleSources
   description: >-
-    Each Maven module of a project with how many source files it holds, main and test, and in which
-    languages. The first step down from a project: pick a module, then ask ModulePackages.
+    Each Maven module with its count of source files, main and test, and languages.
+    The first step down from a project: pick a module, then ask ModulePackages. Only .java, .kt,
+    .kts, .groovy and .scala files under a `src/` folder are counted; up to 500 modules.
   params:
-    project: { type: string, description: "Project key." }
+    project: { type: string, required: true, description: "Project key." }
   cypher: |
     MATCH (p:JavaProject {key: $project})-[:HAS_MODULE]->(m:ProjectModule)
     OPTIONAL MATCH (p)-[:HAS_FILE]->(f:ProjectFile)
@@ -137,10 +149,11 @@
 
 - name: ModulePackages
   description: >-
-    The packages of one Maven module, by source set (main, test), with how many source files each
-    holds and in which languages. A package is the directory under `src/<set>/<language>/`.
+    The packages of one Maven module, by source set, with file counts and languages.
+    A package is the directory under `src/<set>/<language>/`. Only .java, .kt, .kts, .groovy and
+    .scala files; the module matches exactly; up to 3000 packages.
   params:
-    project: { type: string, description: "Project key." }
+    project: { type: string, required: true, description: "Project key." }
     module: { type: string, default: "", description: "The module's directory, as ModuleSources gives it; '' for the root." }
   cypher: |
     MATCH (p:JavaProject {key: $project})-[:HAS_FILE]->(f:ProjectFile)
@@ -153,12 +166,13 @@
 
 - name: PackageFiles
   description: >-
-    The source files of one package in one module and source set, each with a link to it on the
-    repository's host.
+    The source files of one package in one module and source set, with links.
+    Each with a link to it on the repository's host. Only .java, .kt, .kts, .groovy and .scala files;
+    module, package and source set match exactly; up to 2000.
   params:
-    project: { type: string, description: "Project key." }
+    project: { type: string, required: true, description: "Project key." }
     module: { type: string, default: "", description: "The module's directory; '' for the root." }
-    package: { type: string, description: "Dotted package name, as ModulePackages gives it; '' for the default package." }
+    package: { type: string, required: true, description: "Dotted package name, as ModulePackages gives it; '' for the default package." }
     sourceSet: { type: string, default: "main", description: "main or test." }
   cypher: |
     MATCH (p:JavaProject {key: $project})-[:HAS_FILE]->(f:ProjectFile)
@@ -172,11 +186,12 @@
 
 - name: FilesByExtension
   description: >-
-    What a project is written in: its files counted by extension, with how many are under src/main
-    and src/test and how many modules hold them. Every file is counted, not only JVM source, so a
-    build with TypeScript, Python or templates beside its Kotlin and Java shows them.
+    What a project is written in: its files counted by extension.
+    With how many are under src/main and src/test and how many modules hold them. Every file is
+    counted, not only JVM source, so a build with TypeScript, Python or templates beside its Kotlin
+    and Java shows them. Files with no extension are left out; the top 80 extensions.
   params:
-    project: { type: string, description: "Project key." }
+    project: { type: string, required: true, description: "Project key." }
   cypher: |
     MATCH (p:JavaProject {key: $project})-[:HAS_FILE]->(f:ProjectFile)
     WHERE f.extension IS NOT NULL AND f.extension <> ''

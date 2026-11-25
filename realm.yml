@@ -1,9 +1,9 @@
 name: java-project
 description: |
-  A Java project — yours — as a graph you can query, read where it lives when a question reaches
-  it: its Maven build (every module, the dependency tree Maven resolves, the versions its BOMs
-  pin), and its own source (every type, member, annotation and import, and every setting in its
-  .properties and YAML files), each linked to the exact line.
+  A Java project's Maven build and its own source, read live by project key, each row linked to its line.
+  Yours, as a graph you can query, read where it lives when a question reaches it: its Maven build
+  (every module, the dependency tree Maven resolves, the versions its BOMs pin), and its own source
+  (every type, member, annotation and import, and every setting in its .properties and YAML files).
 
   Name the project by a key: a repository, `https://github.com/acme/shop@main` (the default
   branch without `@ref`), or a folder — under the world's data/, or in the workspace the appliance
@@ -15,8 +15,12 @@ description: |
   afresh. It knows no framework — an annotation is its name and its attributes as written — which
   is what a framework's realm (realm-spring) gives meaning. Requires the appliance's `source-tree`
   and `maven` (`from: project`) producer kinds.
-version: 0.1.0
+version: 0.1.1
 maturity: experimental
 realmLabel: JavaBuild
 author: Embabel
 tags: [java, maven, source, code, project]
+# Its types extend the standard model's parents (CodeType, SourceDeclaration, SourceImport), declared
+# by realm-code-model; without it a query naming a parent finds none of these rows.
+requires:
+  code-model: "[0.1.0,1.0.0)"
