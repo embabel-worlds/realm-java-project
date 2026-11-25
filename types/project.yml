@@ -159,7 +159,7 @@
 - name: ProjectFile
   visibility: internal
   userAnchor: false
-  description: "A file in a project (build output, .git and the like skipped). Reach it from (:JavaProject {key})-[:HAS_FILE]->."
+  description: "One file in a project, identified by `id` (`<project>!<path>`). Every file of the project's own: anything under a folder named .git, target, build, out, node_modules, .gradle, .idea or .mvn, at any depth, is skipped. Reach it from (:JavaProject {key})-[:HAS_FILE]->."
   virtualJoins:
     - { anchorLabel: JavaProject, relationship: HAS_FILE, keyField: key, recordKeyField: anchorKey, producer: projectFiles, maxFanoutTotal: 200000,
         description: "(:JavaProject {key:$project})-[:HAS_FILE]->(f:ProjectFile)" }

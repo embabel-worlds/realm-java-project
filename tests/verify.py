@@ -41,8 +41,12 @@ def view(name, args):
 work = tempfile.mkdtemp(prefix='java-project-truth-')
 subprocess.run(['git', 'clone', '-q', '--no-checkout', REPO + '.git', work], check=True)
 subprocess.run(['git', '-C', work, 'checkout', '-q', SHA], check=True)
-paths = subprocess.run(['git', '-C', work, 'ls-tree', '-r', '--name-only', SHA], check=True,
-                       capture_output=True, text=True).stdout.split()
+# A project's files are its own: a folder a build writes, a VCS keeps or a tool installs is skipped
+# wherever it sits (ProjectFile's description names them), so the truth skips them too.
+SKIPPED = {'.git', 'target', 'build', 'out', 'node_modules', '.gradle', '.idea', '.mvn'}
+paths = [p for p in subprocess.run(['git', '-C', work, 'ls-tree', '-r', '--name-only', SHA], check=True,
+                                   capture_output=True, text=True).stdout.split()
+         if not SKIPPED & set(p.split('/')[:-1])]
 def text(p): return open(os.path.join(work, p), encoding='utf-8', errors='replace').read()
 def ext(p): return p.rsplit('/', 1)[-1].rsplit('.', 1)[-1].lower() if '.' in p.rsplit('/', 1)[-1] else ''
 def source_set(p):
