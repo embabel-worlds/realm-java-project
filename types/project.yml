@@ -192,7 +192,7 @@
 - name: ProjectDependency
   visibility: internal
   userAnchor: false
-  description: "An artifact in a module's dependency tree as Maven resolves it — versions settled by Maven's rules, BOMs and parents applied — the module itself first at depth 0. `scope` and `optional` as Maven derives them. The runtime classpath only: compile and runtime scope, so a test-scoped dependency is not here (ProjectDeclaredDependency has it). Reach it from (:JavaProject {key})-[:DEPENDS_ON]->."
+  description: "One artifact in a module's dependency tree as Maven resolves it, identified by `id` (module and coordinates) — versions settled by Maven's rules, BOMs and parents applied — the module itself first at depth 0. `scope` and `optional` as Maven derives them. The runtime classpath only: compile and runtime scope, so a test-scoped dependency is not here (ProjectDeclaredDependency has it). Reach it from (:JavaProject {key})-[:DEPENDS_ON]->."
   virtualJoins:
     - { anchorLabel: JavaProject, relationship: DEPENDS_ON, keyField: key, recordKeyField: anchorKey, producer: projectDependencies, maxFanoutTotal: 200000,
         description: "(:JavaProject {key:$project})-[:DEPENDS_ON]->(d:ProjectDependency)" }
